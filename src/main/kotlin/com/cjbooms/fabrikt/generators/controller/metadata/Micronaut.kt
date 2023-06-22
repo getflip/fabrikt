@@ -19,6 +19,8 @@ object MicronautImports {
         const val MICRONAUT_AUTHENTICATION = "$MICRONAUT_SECURITY.authentication"
 
         const val MICRONAUT_RULE= "$MICRONAUT_SECURITY.rules"
+
+        const val MICRONAUT_VALIDATION= "$MICRONAUT_BASE.validation"
     }
 
     val CONSUMES = ClassName(Packages.MICRONAUT_HTTP_ANNOTATION, "Consumes")
@@ -37,6 +39,8 @@ object MicronautImports {
     val HEADER = ClassName(Packages.MICRONAUT_HTTP_ANNOTATION, "Header")
     val QUERY_VALUE = ClassName(Packages.MICRONAUT_HTTP_ANNOTATION, "QueryValue")
     val PATH_VARIABLE = ClassName(Packages.MICRONAUT_HTTP_ANNOTATION, "PathVariable")
+
+    val VALIDATED = ClassName(Packages.MICRONAUT_VALIDATION, "Validated")
 
 
     object HttpMethods {

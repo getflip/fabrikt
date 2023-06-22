@@ -34,6 +34,7 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
 
 class MicronautControllerInterfaceGenerator(
@@ -99,6 +100,9 @@ class MicronautControllerInterfaceGenerator(
         controllerBuilder.primaryConstructor(
             FunSpec.constructorBuilder().addParameter(delegateParameterName, delegateClassName).build()
         )
+        controllerBuilder.addProperty(
+            PropertySpec.builder(delegateParameterName, delegateClassName).initializer(delegateParameterName).build()
+        )
 
         return ControllerType(
             controllerBuilder.build(),
@@ -114,6 +118,11 @@ class MicronautControllerInterfaceGenerator(
             .addAnnotation(
                 AnnotationSpec
                     .builder(MicronautImports.CONTROLLER)
+                    .build(),
+            )
+            .addAnnotation(
+                AnnotationSpec
+                    .builder(MicronautImports.VALIDATED)
                     .build(),
             )
 
@@ -304,13 +313,16 @@ class MicronautControllerInterfaceGenerator(
             }
 
             if (securityRule != "") {
+                val requirements = op.securityRequirements[0].requirements.get("BearerAuth")?.parameters
+                val spec = AnnotationSpec
+                    .builder(MicronautImports.SECURED)
+                requirements?.forEach { spec.addMember("\"$it\"") }
+                if (requirements.isNullOrEmpty()) {
+                    spec.addMember(securityRule)
+                }
+
                 this.addAnnotation(
-                    AnnotationSpec
-                        .builder(MicronautImports.SECURED)
-                        .addMember(
-                            securityRule,
-                        )
-                        .build(),
+                    spec.build()
                 )
             }
         }
