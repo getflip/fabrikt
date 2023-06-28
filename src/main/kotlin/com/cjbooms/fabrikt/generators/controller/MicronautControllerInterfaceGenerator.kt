@@ -288,10 +288,13 @@ class MicronautControllerInterfaceGenerator(
             }
 
             if (securityRule != "") {
+                val systemRoleTypeName = ClassName("de.flipnext.core.usermanagement.users.domain","SystemRole")
                 val requirements = op.securityRequirements.getOrNull(0)?.requirements?.values?.first()?.parameters
                 val spec = AnnotationSpec
                         .builder(MicronautImports.SECURED)
-                requirements?.forEach { spec.addMember("\"$it\"") }
+                // **warning** this is a hack to get the system role names into the annotation
+                // since this is already custom flip code we use the system role name directly
+                requirements?.forEach { spec.addMember("%T.${it.toUpperCase()}.name", systemRoleTypeName) }
                 if (requirements.isNullOrEmpty()) {
                     spec.addMember(securityRule)
                 }
