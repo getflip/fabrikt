@@ -313,7 +313,7 @@ class MicronautControllerInterfaceGenerator(
             }
 
             if (securityRule != "") {
-                val requirements = op.securityRequirements[0].requirements.get("BearerAuth")?.parameters
+                val requirements = op.securityRequirements.getOrNull(0)?.requirements?.values?.first()?.parameters
                 val spec = AnnotationSpec
                     .builder(MicronautImports.SECURED)
                 requirements?.forEach { spec.addMember("\"$it\"") }
