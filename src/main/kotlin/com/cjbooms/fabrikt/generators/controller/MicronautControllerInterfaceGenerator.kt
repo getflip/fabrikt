@@ -23,324 +23,301 @@ import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 
 class MicronautControllerInterfaceGenerator(
-        private val packages: Packages,
-        private val api: SourceApi,
-        private val options: Set<ControllerCodeGenOptionType> = emptySet(),
+    private val packages: Packages,
+    private val api: SourceApi,
+    private val options: Set<ControllerCodeGenOptionType> = emptySet(),
 ) : ControllerInterfaceGenerator(packages, api) {
 
-    private val useSuspendModifier: Boolean
-        get() = options.any { it == ControllerCodeGenOptionType.SUSPEND_MODIFIER }
+  private val useSuspendModifier: Boolean
+    get() = options.any { it == ControllerCodeGenOptionType.SUSPEND_MODIFIER }
 
-    private val addAuthenticationParameter: Boolean
-        get() = options.any { it == ControllerCodeGenOptionType.AUTHENTICATION }
+  private val addAuthenticationParameter: Boolean
+    get() = options.any { it == ControllerCodeGenOptionType.AUTHENTICATION }
 
-    override fun generate(): MicronautControllers =
-            MicronautControllers(
-                    api.openApi3.routeToPaths().map { (resourceName, paths) ->
-                        buildControllerWithDelegate(resourceName, paths.values)
-                    }.toSet(),
-                    addAuthenticationParameter,
-            )
+  override fun generate(): MicronautControllers =
+      MicronautControllers(
+          api.openApi3
+              .routeToPaths()
+              .map { (resourceName, paths) ->
+                buildControllerWithDelegate(resourceName, paths.values)
+              }
+              .toSet(),
+          addAuthenticationParameter,
+      )
 
-    override fun buildFunction(path: Path, op: Operation, verb: String): FunSpec {
-        TODO("Not yet implemented")
+  override fun buildFunction(path: Path, op: Operation, verb: String): FunSpec {
+    TODO("Not yet implemented")
+  }
+
+  fun buildControllerWithDelegate(resourceName: String, paths: Collection<Path>): ControllerType {
+    val controllerBuilder: TypeSpec.Builder =
+        controllerBuilder(
+            className = ControllerGeneratorUtils.controllerName(resourceName),
+            basePath = api.openApi3.basePath())
+
+    val delegateName = "Delegate"
+    val delegateClassName = ClassName("", delegateName)
+    val delegateParameterName = "delegate"
+    val delegateBuilder = TypeSpec.interfaceBuilder(delegateName)
+
+    paths.flatMap { path ->
+      path.operations
+          .filter { it.key.toUpperCase() != "HEAD" }
+          .map { op ->
+            controllerBuilder.addFunction(
+                buildFunctionCallingDelegate(path, op.value, op.key, delegateParameterName))
+            delegateBuilder.addFunction(buildFunctionForDelegate(path, op.value, op.key))
+          }
+    }
+    val delegateType = delegateBuilder.build()
+
+    controllerBuilder.addType(delegateType)
+    controllerBuilder.primaryConstructor(
+        FunSpec.constructorBuilder().addParameter(delegateParameterName, delegateClassName).build())
+    controllerBuilder.addProperty(
+        PropertySpec.builder(delegateParameterName, delegateClassName)
+            .initializer(delegateParameterName)
+            .build())
+
+    return ControllerType(controllerBuilder.build(), packages.base)
+  }
+
+  override fun controllerBuilder(
+      className: String,
+      basePath: String,
+  ) =
+      TypeSpec.classBuilder(className)
+          .addAnnotation(
+              AnnotationSpec.builder(MicronautImports.CONTROLLER).build(),
+          )
+          .addAnnotation(
+              AnnotationSpec.builder(MicronautImports.VALIDATED).build(),
+          )
+
+  fun buildFunctionForDelegate(
+      path: Path,
+      op: Operation,
+      verb: String,
+  ): FunSpec {
+    val methodName = methodName(op, verb, path.pathString.isSingleResource())
+    val returnType = MicronautImports.RESPONSE.parameterizedBy(op.happyPathResponse(packages.base))
+    val parameters = op.toIncomingParameters(packages.base, path.parameters, emptyList())
+    val globalSecurity = this.api.openApi3.securityRequirements.securitySupport()
+
+    // Main method builder
+    val funcSpec =
+        FunSpec.builder(methodName)
+            .apply {
+              if (useSuspendModifier) {
+                addModifiers(KModifier.SUSPEND)
+              }
+            }
+            .addModifiers(KModifier.ABSTRACT)
+            .returns(returnType)
+
+    // Function parameters
+    parameters.map { it.toParameterSpecBuilder().build() }.forEach { funcSpec.addParameter(it) }
+
+    // Add authentication
+    if (addAuthenticationParameter) {
+      val securityOption = op.securitySupport(globalSecurity)
+
+      if (securityOption.allowsAuthenticated) {
+        val typeName =
+            MicronautImports.AUTHENTICATION.copy(
+                nullable = securityOption == SecuritySupport.AUTHENTICATION_OPTIONAL)
+        funcSpec.addParameter(
+            ParameterSpec.builder("authentication", typeName).build(),
+        )
+      }
     }
 
-    fun buildControllerWithDelegate(resourceName: String, paths: Collection<Path>): ControllerType {
-        val controllerBuilder: TypeSpec.Builder = controllerBuilder(
-                className = ControllerGeneratorUtils.controllerName(resourceName),
-                basePath = api.openApi3.basePath()
-        )
+    return funcSpec.build()
+  }
 
-        val delegateName = "Delegate"
-        val delegateClassName = ClassName("", delegateName)
-        val delegateParameterName = "delegate"
-        val delegateBuilder = TypeSpec.interfaceBuilder(delegateName)
+  fun buildFunctionCallingDelegate(
+      path: Path,
+      op: Operation,
+      verb: String,
+      delegateName: String
+  ): FunSpec {
+    val methodName = methodName(op, verb, path.pathString.isSingleResource())
+    val returnType = MicronautImports.RESPONSE.parameterizedBy(op.happyPathResponse(packages.base))
+    val parameters = op.toIncomingParameters(packages.base, path.parameters, emptyList())
+    val globalSecurity = this.api.openApi3.securityRequirements.securitySupport()
 
-        paths.flatMap { path ->
-            path.operations
-                    .filter { it.key.toUpperCase() != "HEAD" }
-                    .map { op ->
-                        controllerBuilder.addFunction(buildFunctionCallingDelegate(
-                                path,
-                                op.value,
-                                op.key,
-                                delegateParameterName
-                        ))
-                        delegateBuilder.addFunction(buildFunctionForDelegate(
-                                path,
-                                op.value,
-                                op.key
-                        ))
-                    }
-        }
-        val delegateType = delegateBuilder.build()
-
-        controllerBuilder.addType(delegateType)
-        controllerBuilder.primaryConstructor(FunSpec.constructorBuilder().addParameter(delegateParameterName, delegateClassName).build())
-        controllerBuilder.addProperty(PropertySpec.builder(delegateParameterName, delegateClassName).initializer(delegateParameterName).build())
-
-        return ControllerType(
-                controllerBuilder.build(),
-                packages.base
-        )
-    }
-
-    override fun controllerBuilder(
-            className: String,
-            basePath: String,
-    ) =
-            TypeSpec.classBuilder(className)
-                    .addAnnotation(
-                            AnnotationSpec
-                                    .builder(MicronautImports.CONTROLLER)
-                                    .build(),
-                    )
-                    .addAnnotation(
-                            AnnotationSpec
-                                    .builder(MicronautImports.VALIDATED)
-                                    .build(),
-                    )
-
-
-    fun buildFunctionForDelegate(
-            path: Path,
-            op: Operation,
-            verb: String,
-    ): FunSpec {
-        val methodName = methodName(op, verb, path.pathString.isSingleResource())
-        val returnType = MicronautImports.RESPONSE.parameterizedBy(op.happyPathResponse(packages.base))
-        val parameters = op.toIncomingParameters(packages.base, path.parameters, emptyList())
-        val globalSecurity = this.api.openApi3.securityRequirements.securitySupport()
-
-        // Main method builder
-        val funcSpec = FunSpec
-                .builder(methodName)
-                .apply {
-                    if (useSuspendModifier) {
-                        addModifiers(KModifier.SUSPEND)
-                    }
-                }
-                .addModifiers(KModifier.ABSTRACT)
-                .returns(returnType)
-
-        // Function parameters
+    val mappedParameters =
         parameters
-                .map { it.toParameterSpecBuilder().build() }
-                .forEach { funcSpec.addParameter(it) }
-
-        // Add authentication
-        if (addAuthenticationParameter) {
-            val securityOption = op.securitySupport(globalSecurity)
-
-            if (securityOption.allowsAuthenticated) {
-                val typeName =
-                        MicronautImports.AUTHENTICATION
-                                .copy(nullable = securityOption == SecuritySupport.AUTHENTICATION_OPTIONAL)
-                funcSpec.addParameter(
-                        ParameterSpec
-                                .builder("authentication", typeName)
-                                .build(),
-                )
+            .map {
+              when (it) {
+                is BodyParameter ->
+                    it.toParameterSpecBuilder()
+                        .addAnnotation(
+                            AnnotationSpec.builder(MicronautImports.BODY).build(),
+                        )
+                        .addAnnotation(JavaXAnnotations.validBuilder().build())
+                        .build()
+                is RequestParameter ->
+                    it.toParameterSpecBuilder()
+                        .addValidationAnnotations(it)
+                        .addMicronautParamAnnotation(it)
+                        .build()
+              }
             }
-        }
+            .toMutableList()
 
-        return funcSpec.build()
+    // Add authentication
+    if (addAuthenticationParameter) {
+      val securityOption = op.securitySupport(globalSecurity)
+
+      if (securityOption.allowsAuthenticated) {
+        val typeName =
+            MicronautImports.AUTHENTICATION.copy(
+                nullable = securityOption == SecuritySupport.AUTHENTICATION_OPTIONAL)
+        mappedParameters.add(ParameterSpec.builder("authentication", typeName).build())
+      }
     }
 
+    // Main method builder
 
-    fun buildFunctionCallingDelegate(
-            path: Path,
-            op: Operation,
-            verb: String,
-            delegateName: String
-    ): FunSpec {
-        val methodName = methodName(op, verb, path.pathString.isSingleResource())
-        val returnType = MicronautImports.RESPONSE.parameterizedBy(op.happyPathResponse(packages.base))
-        val parameters = op.toIncomingParameters(packages.base, path.parameters, emptyList())
-        val globalSecurity = this.api.openApi3.securityRequirements.securitySupport()
+    val builder = CodeBlock.builder()
+    builder.add("return %L.%L(", delegateName, methodName)
+    mappedParameters.forEachIndexed { index, param ->
+      builder.add("%L", param.name)
+      if (index < mappedParameters.size - 1) {
+        builder.add(", ")
+      }
+    }
+    builder.add(")\n")
 
-        val mappedParameters = parameters
-                .map {
-                    when (it) {
-                        is BodyParameter ->
-                            it
-                                    .toParameterSpecBuilder()
-                                    .addAnnotation(
-                                            AnnotationSpec
-                                                    .builder(MicronautImports.BODY).build(),
-                                    )
-                                    .addAnnotation(JavaXAnnotations.validBuilder().build())
-                                    .build()
-
-                        is RequestParameter ->
-                            it
-                                    .toParameterSpecBuilder()
-                                    .addValidationAnnotations(it)
-                                    .addMicronautParamAnnotation(it)
-                                    .build()
-                    }
-                }.toMutableList()
-
-        // Add authentication
-        if (addAuthenticationParameter) {
-            val securityOption = op.securitySupport(globalSecurity)
-
-            if (securityOption.allowsAuthenticated) {
-                val typeName =
-                        MicronautImports.AUTHENTICATION
-                                .copy(nullable = securityOption == SecuritySupport.AUTHENTICATION_OPTIONAL)
-                mappedParameters.add(
-                        ParameterSpec
-                                .builder("authentication", typeName)
-                                .build())
+    val funcSpec =
+        FunSpec.builder(methodName)
+            .addKdoc(op.toKdoc(parameters))
+            .addMicronautFunAnnotation(op, verb, path.pathString)
+            .apply {
+              if (useSuspendModifier) {
+                addModifiers(KModifier.SUSPEND)
+              }
             }
-        }
+            .addCode(builder.build())
+            .returns(returnType)
 
-        // Main method builder
+    // Function parameters
+    mappedParameters.forEach(funcSpec::addParameter)
 
-        val builder = CodeBlock.builder()
-        builder.add("return %L.%L(", delegateName, methodName)
-        mappedParameters
-                .forEachIndexed { index, param ->
-                    builder.add("%L", param.name)
-                    if (index < mappedParameters.size - 1) {
-                        builder.add(", ")
-                    }
-                }
-        builder.add(")\n")
+    return funcSpec.build()
+  }
 
-        val funcSpec = FunSpec
-                .builder(methodName)
-                .addKdoc(op.toKdoc(parameters))
-                .addMicronautFunAnnotation(op, verb, path.pathString)
-                .apply {
-                    if (useSuspendModifier) {
-                        addModifiers(KModifier.SUSPEND)
-                    }
-                }.addCode(builder.build())
-                .returns(returnType)
+  private fun FunSpec.Builder.addMicronautFunAnnotation(
+      op: Operation,
+      verb: String,
+      path: String
+  ): FunSpec.Builder {
+    val globalSecurity = api.openApi3.securityRequirements.securitySupport()
 
-        // Function parameters
-        mappedParameters.forEach(funcSpec::addParameter)
+    val produces = op.responses.flatMap { it.value.contentMediaTypes.keys }.toTypedArray()
 
-        return funcSpec.build()
+    val consumes = op.requestBody.contentMediaTypes.keys.toTypedArray()
+
+    this.addAnnotation(
+        AnnotationSpec.builder(MicronautImports.HttpMethods.byName(verb))
+            .addMember("uri = %S", path)
+            .build(),
+    )
+
+    if (consumes.isNotEmpty()) {
+      this.addAnnotation(
+          AnnotationSpec.builder(MicronautImports.CONSUMES)
+              .addMember(
+                  "value = %L",
+                  consumes.joinToString(
+                      prefix = "[",
+                      postfix = "]",
+                      separator = ", ",
+                      transform = { "\"$it\"" },
+                  ),
+              )
+              .build(),
+      )
     }
 
-    private fun FunSpec.Builder.addMicronautFunAnnotation(op: Operation, verb: String, path: String): FunSpec.Builder {
-        val globalSecurity =
-                api.openApi3.securityRequirements.securitySupport()
-
-        val produces = op.responses
-                .flatMap { it.value.contentMediaTypes.keys }
-                .toTypedArray()
-
-        val consumes = op.requestBody
-                .contentMediaTypes.keys
-                .toTypedArray()
-
-        this.addAnnotation(
-                AnnotationSpec
-                        .builder(MicronautImports.HttpMethods.byName(verb))
-                        .addMember("uri = %S", path).build(),
-        )
-
-        if (consumes.isNotEmpty()) {
-            this.addAnnotation(
-                    AnnotationSpec
-                            .builder(MicronautImports.CONSUMES)
-                            .addMember(
-                                    "value = %L",
-                                    consumes.joinToString(
-                                            prefix = "[",
-                                            postfix = "]",
-                                            separator = ", ",
-                                            transform = { "\"$it\"" },
-                                    ),
-                            )
-                            .build(),
-            )
-        }
-
-        if (produces.isNotEmpty()) {
-            this.addAnnotation(
-                    AnnotationSpec
-                            .builder(MicronautImports.PRODUCES)
-                            .addMember(
-                                    "value = %L",
-                                    produces.joinToString(
-                                            prefix = "[",
-                                            postfix = "]",
-                                            separator = ", ",
-                                            transform = { "\"$it\"" },
-                                    ),
-                            )
-                            .build(),
-            )
-        }
-
-        if (addAuthenticationParameter) {
-            val securityRule = when (op.securitySupport(globalSecurity)) {
-                SecuritySupport.AUTHENTICATION_REQUIRED -> SECURITY_RULE_IS_AUTHENTICATED
-                SecuritySupport.AUTHENTICATION_PROHIBITED -> SECURITY_RULE_IS_ANONYMOUS
-                SecuritySupport.AUTHENTICATION_OPTIONAL -> "$SECURITY_RULE_IS_AUTHENTICATED, $SECURITY_RULE_IS_ANONYMOUS"
-                else -> ""
-            }
-
-            if (securityRule != "") {
-                val systemRoleTypeName = ClassName("de.flipnext.core.usermanagement.users.domain","SystemRole")
-                val requirements = op.securityRequirements.getOrNull(0)?.requirements?.values?.first()?.parameters
-                val spec = AnnotationSpec
-                        .builder(MicronautImports.SECURED)
-                // **warning** this is a hack to get the system role names into the annotation
-                // since this is already custom flip code we use the system role name directly
-                requirements?.forEach { spec.addMember("%T.${it.toUpperCase()}.name", systemRoleTypeName) }
-                if (requirements.isNullOrEmpty()) {
-                    spec.addMember(securityRule)
-                }
-
-                this.addAnnotation(
-                        spec.build()
-                )
-            }
-        }
-
-        return this
+    if (produces.isNotEmpty()) {
+      this.addAnnotation(
+          AnnotationSpec.builder(MicronautImports.PRODUCES)
+              .addMember(
+                  "value = %L",
+                  produces.joinToString(
+                      prefix = "[",
+                      postfix = "]",
+                      separator = ", ",
+                      transform = { "\"$it\"" },
+                  ),
+              )
+              .build(),
+      )
     }
 
-    private fun ParameterSpec.Builder.addMicronautParamAnnotation(parameter: RequestParameter): ParameterSpec.Builder =
-            when (parameter.parameterLocation) {
-                QueryParam ->
-                    AnnotationSpec
-                            .builder(MicronautImports.QUERY_VALUE)
+    if (addAuthenticationParameter) {
+      val securityRule =
+          when (op.securitySupport(globalSecurity)) {
+            SecuritySupport.AUTHENTICATION_REQUIRED -> SECURITY_RULE_IS_AUTHENTICATED
+            SecuritySupport.AUTHENTICATION_PROHIBITED -> SECURITY_RULE_IS_ANONYMOUS
+            SecuritySupport.AUTHENTICATION_OPTIONAL ->
+                "$SECURITY_RULE_IS_AUTHENTICATED, $SECURITY_RULE_IS_ANONYMOUS"
+            else -> ""
+          }
 
-                HeaderParam ->
-                    AnnotationSpec
-                            .builder(MicronautImports.HEADER)
+      if (securityRule != "") {
+        val systemRoleTypeName =
+            ClassName("de.flipnext.core.usermanagement.users.domain", "SystemRole")
+        val requirements =
+            op.securityRequirements.getOrNull(0)?.requirements?.values?.first()?.parameters
+        val spec = AnnotationSpec.builder(MicronautImports.SECURED)
+        // **warning** this is a hack to get the system role names into the annotation
+        // since this is already custom flip code we use the system role name directly
+        requirements?.forEach { spec.addMember("%T.${it.toUpperCase()}.name", systemRoleTypeName) }
+        if (requirements.isNullOrEmpty()) {
+          spec.addMember(securityRule)
+        }
 
-                PathParam ->
-                    AnnotationSpec
-                            .builder(MicronautImports.PATH_VARIABLE)
-            }.let {
-                it.addMember("value = %S", parameter.oasName)
+        this.addAnnotation(spec.build())
+      }
+    }
 
-                if (parameter.defaultValue != null) {
-                    it.addMember("defaultValue = %S", parameter.defaultValue)
-                }
-                this.addAnnotation(it.build())
-            }
+    return this
+  }
+
+  private fun ParameterSpec.Builder.addMicronautParamAnnotation(
+      parameter: RequestParameter
+  ): ParameterSpec.Builder =
+      when (parameter.parameterLocation) {
+        QueryParam -> AnnotationSpec.builder(MicronautImports.QUERY_VALUE)
+        HeaderParam -> AnnotationSpec.builder(MicronautImports.HEADER)
+        PathParam -> AnnotationSpec.builder(MicronautImports.PATH_VARIABLE)
+      }.let {
+        it.addMember("value = %S", parameter.oasName)
+
+        if (parameter.defaultValue != null) {
+          it.addMember("defaultValue = %S", parameter.defaultValue)
+        }
+        this.addAnnotation(it.build())
+      }
 }
 
-data class MicronautControllers(val controllers: Collection<ControllerType>, val addAuthenticationParameter: Boolean) : KotlinTypes(controllers) {
+data class MicronautControllers(
+    val controllers: Collection<ControllerType>,
+    val addAuthenticationParameter: Boolean
+) : KotlinTypes(controllers) {
 
-    override val files: Collection<FileSpec> =
-            if (addAuthenticationParameter) {
-                super.files.map {
-                    it.toBuilder()
-                            .addImport(MicronautImports.SECURITY_RULE.first, MicronautImports.SECURITY_RULE.second)
-                            .build()
-                }
-            } else {
-                super.files
-            }
+  override val files: Collection<FileSpec> =
+      if (addAuthenticationParameter) {
+        super.files.map {
+          it.toBuilder()
+              .addImport(
+                  MicronautImports.SECURITY_RULE.first, MicronautImports.SECURITY_RULE.second)
+              .build()
+        }
+      } else {
+        super.files
+      }
 }
