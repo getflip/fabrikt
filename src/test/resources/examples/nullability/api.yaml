@@ -1,0 +1,43 @@
+openapi: 3.0.0
+paths: { }
+info:
+  title: ""
+  version: ""
+components:
+  schemas:
+    MergePatchNullabilityCheck:
+      type: object
+      x-json-merge-patch: true
+      properties:
+        not-null-no-default:
+          type: string
+          nullable: false
+        nullable-no-default:
+          type: string
+          nullable: true
+        not-null-with-default:
+          type: string
+          nullable: false
+          default: ""
+        nullable-with-default:
+          type: string
+          nullable: true
+          default: ""
+    NullabilityCheck:
+      type: object
+      required:
+        - not-null-required
+        - nullable-required
+      properties:
+        not-null-not-required:
+          type: string
+          nullable: false
+        nullable-not-required:
+          type: string
+          nullable: true
+        not-null-required:
+          type: string
+          nullable: false
+        nullable-required:
+          type: string
+          nullable: true

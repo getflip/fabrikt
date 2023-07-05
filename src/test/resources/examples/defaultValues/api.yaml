@@ -1,4 +1,8 @@
 openapi: 3.0.0
+paths: { }
+info:
+  title: ""
+  version: ""
 components:
   schemas:
     PersonWithDefaults:

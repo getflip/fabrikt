@@ -1,17 +1,11 @@
 package com.cjbooms.fabrikt.generators
 
+import com.cjbooms.fabrikt.generators.PropertyUtils.isNullable
 import com.cjbooms.fabrikt.generators.model.JacksonMetadata
 import com.cjbooms.fabrikt.model.KotlinTypeInfo
 import com.cjbooms.fabrikt.model.PropertyInfo
-import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import com.squareup.kotlinpoet.PropertySpec
-import com.squareup.kotlinpoet.TypeName
-import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.asTypeName
 
 data class ClassSettings(
     val polymorphyType: PolymorphyType,
@@ -100,7 +94,7 @@ object PropertyUtils {
                 ClassSettings.PolymorphyType.NONE -> {
                     property.addAnnotation(JacksonMetadata.jacksonParameterAnnotation(oasKey))
                     property.addAnnotation(JacksonMetadata.jacksonPropertyAnnotation(oasKey))
-                    property.addValidationAnnotations(this, validationAnnotations)
+                    property.addValidationAnnotations(this, validationAnnotations, classSettings.isMergePatchPattern)
                 }
             }
 
@@ -188,10 +182,16 @@ object PropertyUtils {
         }
     }
 
-    fun PropertyInfo.isNullable() = when (this) {
-        is PropertyInfo.Field -> !isRequired && schema.default == null
+    fun PropertyInfo.isNullable(isMergePatch: Boolean = false) = when (this) {
+        is PropertyInfo.Field -> !this.isMandatory(isMergePatch)
         else -> !isRequired
     }
+
+    private fun PropertyInfo.Field.isMandatory(isMergePatch: Boolean = false) =
+      (isMergePatch && !schema.isNullable)
+            || (!isMergePatch && (isRequired && !schema.isNullable))
+            || (!isMergePatch && (!isRequired && schema.default != null))
+
 
     /**
      * Current Open API v3 Spec validation keys:
@@ -214,8 +214,9 @@ object PropertyUtils {
     private fun PropertySpec.Builder.addValidationAnnotations(
         info: PropertyInfo,
         validationAnnotations: ValidationAnnotations,
+        isMergePatch: Boolean = false,
     ) {
-        if (!info.isNullable()) addAnnotation(validationAnnotations.nonNullAnnotation)
+        if (!info.isNullable(isMergePatch)) addAnnotation(validationAnnotations.nonNullAnnotation)
         when (info) {
             is PropertyInfo.Field -> {
                 // Regex validation pattern to validate string input
