@@ -9,6 +9,7 @@ import kotlin.String
 public data class InnerMergePatch(
     @param:JsonProperty("p")
     @get:JsonProperty("p")
+    @get:NotNull
     public val p: JsonNullable<String> = JsonNullable.undefined(),
 )
 
@@ -28,6 +29,7 @@ public data class InnerOnlyMergePatchInline(
 public data class InnerOnlyMergePatchInlineInner(
     @param:JsonProperty("p")
     @get:JsonProperty("p")
+    @get:NotNull
     public val p: JsonNullable<String> = JsonNullable.undefined(),
 )
 
@@ -48,6 +50,7 @@ public data class NestedMergePatchInline(
 public data class NestedMergePatchInlineInner(
     @param:JsonProperty("p")
     @get:JsonProperty("p")
+    @get:NotNull
     public val p: JsonNullable<String> = JsonNullable.undefined(),
 )
 
@@ -76,39 +79,6 @@ public data class NoMergePatchRef(
     @get:JsonProperty("inner")
     @get:Valid
     public val `inner`: InnerNotMergePatch? = null,
-)
-
-public data class NullabilityCheck(
-    @param:JsonProperty("not-null-no-default-not-required")
-    @get:JsonProperty("not-null-no-default-not-required")
-    public val notNullNoDefaultNotRequired: JsonNullable<String> = JsonNullable.undefined(),
-    @param:JsonProperty("nullable-no-default-not-required")
-    @get:JsonProperty("nullable-no-default-not-required")
-    public val nullableNoDefaultNotRequired: JsonNullable<String?> = JsonNullable.undefined(),
-    @param:JsonProperty("not-null-with-default-not-required")
-    @get:JsonProperty("not-null-with-default-not-required")
-    @get:NotNull
-    public val notNullWithDefaultNotRequired: JsonNullable<String> = JsonNullable.of(""),
-    @param:JsonProperty("nullable-with-default-not-required")
-    @get:JsonProperty("nullable-with-default-not-required")
-    @get:NotNull
-    public val nullableWithDefaultNotRequired: JsonNullable<String?> = JsonNullable.of(""),
-    @param:JsonProperty("not-null-no-default-required")
-    @get:JsonProperty("not-null-no-default-required")
-    @get:NotNull
-    public val notNullNoDefaultRequired: String,
-    @param:JsonProperty("nullable-no-default-required")
-    @get:JsonProperty("nullable-no-default-required")
-    @get:NotNull
-    public val nullableNoDefaultRequired: String,
-    @param:JsonProperty("not-null-with-default-required")
-    @get:JsonProperty("not-null-with-default-required")
-    @get:NotNull
-    public val notNullWithDefaultRequired: String,
-    @param:JsonProperty("nullable-with-default-required")
-    @get:JsonProperty("nullable-with-default-required")
-    @get:NotNull
-    public val nullableWithDefaultRequired: String,
 )
 
 public data class TopLevelLevelMergePatchInline(

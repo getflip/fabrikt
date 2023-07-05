@@ -41,6 +41,7 @@ class ModelGeneratorTest {
         "jsonMergePatch",
         "mapExamples",
         "mixingCamelSnakeLispCase",
+        "nullability",
         "oneOfPolymorphicModels",
         "optionalVsRequired",
         "polymorphicModels",
