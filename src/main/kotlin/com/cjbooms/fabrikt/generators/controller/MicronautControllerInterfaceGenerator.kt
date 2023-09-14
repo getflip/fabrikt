@@ -68,15 +68,16 @@ class MicronautControllerInterfaceGenerator(
             basePath = api.openApi3.basePath()
         )
 
-        val delegateName = "Delegate"
-        val delegateClassName = ClassName("", delegateName)
-        val delegateParameterName = "delegate"
-        val delegateBuilder = TypeSpec.interfaceBuilder(delegateName)
-
-        paths.flatMap { path ->
+        val constructorBuilder = FunSpec.constructorBuilder()
+        paths.forEach { path ->
             path.operations
                 .filter { it.key.toUpperCase() != "HEAD" }
-                .map { op ->
+                .forEach { op ->
+                    val name = methodName(op.value, op.key, path.pathString.isSingleResource())
+                    val delegateName = name.replaceFirstChar { it.uppercase() } + "Delegate"
+                    val delegateClassName = ClassName("", delegateName)
+                    val delegateParameterName = name + "Delegate"
+                    val delegateBuilder = TypeSpec.interfaceBuilder(delegateName)
                     controllerBuilder.addFunction(
                         buildFunctionCallingDelegate(
                             path,
@@ -85,24 +86,18 @@ class MicronautControllerInterfaceGenerator(
                             delegateParameterName
                         )
                     )
-                    delegateBuilder.addFunction(
-                        buildFunctionForDelegate(
-                            path,
-                            op.value,
-                            op.key
-                        )
+                    delegateBuilder.addFunction(buildFunctionForDelegate(path, op.value, op.key))
+                    constructorBuilder.addParameter(delegateParameterName, delegateClassName)
+                    controllerBuilder.addProperty(
+                        PropertySpec.builder(delegateParameterName, delegateClassName)
+                            .initializer(delegateParameterName)
+                            .build()
                     )
+                    controllerBuilder.addType(delegateBuilder.build())
                 }
         }
-        val delegateType = delegateBuilder.build()
 
-        controllerBuilder.addType(delegateType)
-        controllerBuilder.primaryConstructor(
-            FunSpec.constructorBuilder().addParameter(delegateParameterName, delegateClassName).build()
-        )
-        controllerBuilder.addProperty(
-            PropertySpec.builder(delegateParameterName, delegateClassName).initializer(delegateParameterName).build()
-        )
+        controllerBuilder.primaryConstructor(constructorBuilder.build())
 
         return ControllerType(
             controllerBuilder.build(),
@@ -362,8 +357,7 @@ data class MicronautControllers(val controllers: Collection<ControllerType>, val
         if (addAuthenticationParameter) {
             super.files.map {
                 it.toBuilder()
-                    .addImport(MicronautImports.SECURITY_RULE.first, MicronautImports.SECURITY_RULE.second)
-                    .build()
+                    .addImport(MicronautImports.SECURITY_RULE.first, MicronautImports.SECURITY_RULE.second).build()
             }
         } else {
             super.files
