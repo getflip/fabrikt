@@ -1,5 +1,8 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.dokka.gradle.DokkaTask
+import java.io.OutputStream
+import java.security.DigestOutputStream
+import java.security.MessageDigest
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.8.20" // Apply the Kotlin JVM plugin to add support for Kotlin.
@@ -188,4 +191,19 @@ tasks {
     test {
         jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED")
     }
+    shadowJar {
+        doLast {
+            println(calcSha1(File("$buildDir/libs/$executableName.jar")))
+        }
+    }
 }
+
+fun calcSha1(file: File): String {
+    val md = DigestOutputStream(
+        OutputStream.nullOutputStream(), MessageDigest.getInstance("SHA-1")
+    )
+    file.inputStream().copyTo(md)
+    return md.messageDigest.digest().toHex()
+}
+
+fun ByteArray.toHex() = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
