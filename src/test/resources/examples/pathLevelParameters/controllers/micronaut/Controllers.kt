@@ -4,11 +4,15 @@ import io.micronaut.http.HttpResponse
 import io.micronaut.http.annotation.Controller
 import io.micronaut.http.annotation.Get
 import io.micronaut.http.annotation.QueryValue
+import io.micronaut.validation.Validated
 import kotlin.String
 import kotlin.Unit
 
 @Controller
-interface ExampleController {
+@Validated
+class ExampleController(
+    val getDelegate: GetDelegate
+) {
     /**
      *
      *
@@ -17,5 +21,9 @@ interface ExampleController {
      */
     @Get(uri = "/example")
     fun get(@QueryValue(value = "a") a: String, @QueryValue(value = "b") b: String):
-        HttpResponse<Unit>
+        HttpResponse<Unit> = getDelegate.get(a, b)
+
+    interface GetDelegate {
+        fun get(a: String, b: String): HttpResponse<Unit>
+    }
 }

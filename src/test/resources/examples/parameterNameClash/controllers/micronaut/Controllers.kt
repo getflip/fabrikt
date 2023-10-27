@@ -9,12 +9,17 @@ import io.micronaut.http.annotation.Get
 import io.micronaut.http.annotation.PathVariable
 import io.micronaut.http.annotation.Post
 import io.micronaut.http.annotation.QueryValue
+import io.micronaut.validation.Validated
 import javax.validation.Valid
 import kotlin.String
 import kotlin.Unit
 
 @Controller
-interface ExampleController {
+@Validated
+class ExampleController(
+    val getByIdDelegate: GetByIdDelegate,
+    val postDelegate: PostDelegate
+) {
     /**
      *
      *
@@ -26,7 +31,7 @@ interface ExampleController {
         @PathVariable(value = "pathB") pathB: String,
         @QueryValue(value = "queryB")
         queryB: String
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = getByIdDelegate.getById(pathB, queryB)
 
     /**
      *
@@ -41,5 +46,16 @@ interface ExampleController {
         bodySomeObject: SomeObject,
         @QueryValue(value = "querySomeObject")
         querySomeObject: String
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = postDelegate.post(
+        bodySomeObject,
+        querySomeObject
+    )
+
+    interface GetByIdDelegate {
+        fun getById(pathB: String, queryB: String): HttpResponse<Unit>
+    }
+
+    interface PostDelegate {
+        fun post(bodySomeObject: SomeObject, querySomeObject: String): HttpResponse<Unit>
+    }
 }

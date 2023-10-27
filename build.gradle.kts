@@ -77,7 +77,7 @@ tasks {
             attributes["Built-JDK"] = System.getProperty("java.version")
             attributes["Built-Gradle"] = gradle.gradleVersion
         }
-        archiveBaseName.set(executableName)
+        archiveFileName.set(executableName + ".jar")
         archiveClassifier.set("")
     }
 
@@ -174,4 +174,10 @@ signing {
     useInMemoryPgpKeys(signingKey, signingPassword)
 
     sign(publishing.publications["fabrikt"])
+}
+
+tasks {
+    test {
+        jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED")
+    }
 }
