@@ -309,7 +309,7 @@ class MicronautControllerInterfaceGenerator(
 
             if (securityRule != "") {
                 val systemRoleTypeName = ClassName("de.flipnext.core.usermanagement.users.domain","SystemRole")
-                val requirements = op.securityRequirements.getOrNull(0)?.requirements?.values?.first()?.parameters
+                val requirements = op.securityRequirements.getOrNull(0)?.requirements?.values?.firstOrNull()?.parameters
                 val spec = AnnotationSpec
                     .builder(MicronautImports.SECURED)
                 // **warning** this is a hack to get the system role names into the annotation

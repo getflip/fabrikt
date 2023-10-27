@@ -24,6 +24,7 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.junit.jupiter.params.provider.MethodSource
+import java.io.File
 import java.util.stream.Stream
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -68,6 +69,13 @@ class MicronautControllerGeneratorTest {
             api,
             JavaxValidationAnnotations,
         ).generate().toSingleFile()
+
+        /*
+        Use this to update the expected output
+        File("src/test/resources/examples/$testCaseName/controllers/micronaut/Controllers.kt").writeText(
+            controllers
+        )
+        */
 
         assertThat(controllers).isEqualTo(expectedControllers)
     }
@@ -124,6 +132,7 @@ class MicronautControllerGeneratorTest {
 
         assertThat(controllerAnnotations).containsOnly(
             "io.micronaut.http.`annotation`.Controller",
+            "io.micronaut.validation.Validated",
         )
     }
 

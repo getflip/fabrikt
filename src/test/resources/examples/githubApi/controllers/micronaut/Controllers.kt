@@ -23,6 +23,7 @@ import io.micronaut.http.`annotation`.Post
 import io.micronaut.http.`annotation`.Produces
 import io.micronaut.http.`annotation`.Put
 import io.micronaut.http.`annotation`.QueryValue
+import io.micronaut.validation.Validated
 import java.util.UUID
 import javax.validation.Valid
 import javax.validation.constraints.Max
@@ -34,7 +35,10 @@ import kotlin.Unit
 import kotlin.collections.List
 
 @Controller
-public interface InternalEventsController {
+@Validated
+public class InternalEventsController(
+    public val postDelegate: PostDelegate,
+) {
     /**
      * Generate change events for a list of entities
      *
@@ -43,11 +47,22 @@ public interface InternalEventsController {
     @Post(uri = "/internal/events")
     @Consumes(value = ["application/json"])
     @Produces(value = ["application/json", "application/problem+json"])
-    public fun post(@Body @Valid bulkEntityDetails: BulkEntityDetails): HttpResponse<EventResults>
+    public fun post(@Body @Valid bulkEntityDetails: BulkEntityDetails): HttpResponse<EventResults> =
+        postDelegate.post(bulkEntityDetails)
+
+    public interface PostDelegate {
+        public fun post(bulkEntityDetails: BulkEntityDetails): HttpResponse<EventResults>
+    }
 }
 
 @Controller
-public interface ContributorsController {
+@Validated
+public class ContributorsController(
+    public val searchContributorsDelegate: SearchContributorsDelegate,
+    public val createContributorDelegate: CreateContributorDelegate,
+    public val getContributorDelegate: GetContributorDelegate,
+    public val putByIdDelegate: PutByIdDelegate,
+) {
     /**
      * Page through all the Contributor resources matching the query filters
      *
@@ -70,7 +85,12 @@ public interface ContributorsController {
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @QueryValue(value = "include_inactive") includeInactive: Boolean?,
         @QueryValue(value = "cursor") cursor: String?,
-    ): HttpResponse<ContributorQueryResult>
+    ): HttpResponse<ContributorQueryResult> = searchContributorsDelegate.searchContributors(
+        limit,
+        xFlowId,
+        includeInactive,
+        cursor,
+    )
 
     /**
      * Create a new Contributor
@@ -94,7 +114,11 @@ public interface ContributorsController {
         @Body @Valid contributor: Contributor,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = createContributorDelegate.createContributor(
+        contributor,
+        xFlowId,
+        idempotencyKey,
+    )
 
     /**
      * Get a Contributor by ID
@@ -118,7 +142,12 @@ public interface ContributorsController {
         @QueryValue(value = "status", defaultValue = "all") status: StatusQueryParam,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "If-None-Match") ifNoneMatch: String?,
-    ): HttpResponse<Contributor>
+    ): HttpResponse<Contributor> = getContributorDelegate.getContributor(
+        id,
+        status,
+        xFlowId,
+        ifNoneMatch,
+    )
 
     /**
      * Update an existing Contributor
@@ -150,11 +179,53 @@ public interface ContributorsController {
         @Header(value = "If-Match") ifMatch: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = putByIdDelegate.putById(contributor, id, ifMatch, xFlowId, idempotencyKey)
+
+    public interface SearchContributorsDelegate {
+        public fun searchContributors(
+            limit: Int,
+            xFlowId: String?,
+            includeInactive: Boolean?,
+            cursor: String?,
+        ): HttpResponse<ContributorQueryResult>
+    }
+
+    public interface CreateContributorDelegate {
+        public fun createContributor(
+            contributor: Contributor,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
+
+    public interface GetContributorDelegate {
+        public fun getContributor(
+            id: String,
+            status: StatusQueryParam,
+            xFlowId: String?,
+            ifNoneMatch: String?,
+        ): HttpResponse<Contributor>
+    }
+
+    public interface PutByIdDelegate {
+        public fun putById(
+            contributor: Contributor,
+            id: String,
+            ifMatch: String,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
 }
 
 @Controller
-public interface OrganisationsController {
+@Validated
+public class OrganisationsController(
+    public val getDelegate: GetDelegate,
+    public val postDelegate: PostDelegate,
+    public val getByIdDelegate: GetByIdDelegate,
+    public val putByIdDelegate: PutByIdDelegate,
+) {
     /**
      * Page through all the Organisation resources matching the query filters
      *
@@ -177,7 +248,12 @@ public interface OrganisationsController {
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @QueryValue(value = "include_inactive") includeInactive: Boolean?,
         @QueryValue(value = "cursor") cursor: String?,
-    ): HttpResponse<OrganisationQueryResult>
+    ): HttpResponse<OrganisationQueryResult> = getDelegate.get(
+        limit,
+        xFlowId,
+        includeInactive,
+        cursor,
+    )
 
     /**
      * Create a new Organisation
@@ -201,7 +277,7 @@ public interface OrganisationsController {
         @Body @Valid organisation: Organisation,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = postDelegate.post(organisation, xFlowId, idempotencyKey)
 
     /**
      * Get a Organisation by ID
@@ -225,7 +301,7 @@ public interface OrganisationsController {
         @QueryValue(value = "status", defaultValue = "all") status: StatusQueryParam,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "If-None-Match") ifNoneMatch: String?,
-    ): HttpResponse<Organisation>
+    ): HttpResponse<Organisation> = getByIdDelegate.getById(id, status, xFlowId, ifNoneMatch)
 
     /**
      * Update an existing Organisation
@@ -257,11 +333,59 @@ public interface OrganisationsController {
         @Header(value = "If-Match") ifMatch: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = putByIdDelegate.putById(
+        organisation,
+        id,
+        ifMatch,
+        xFlowId,
+        idempotencyKey,
+    )
+
+    public interface GetDelegate {
+        public fun `get`(
+            limit: Int,
+            xFlowId: String?,
+            includeInactive: Boolean?,
+            cursor: String?,
+        ): HttpResponse<OrganisationQueryResult>
+    }
+
+    public interface PostDelegate {
+        public fun post(
+            organisation: Organisation,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
+
+    public interface GetByIdDelegate {
+        public fun getById(
+            id: String,
+            status: StatusQueryParam,
+            xFlowId: String?,
+            ifNoneMatch: String?,
+        ): HttpResponse<Organisation>
+    }
+
+    public interface PutByIdDelegate {
+        public fun putById(
+            organisation: Organisation,
+            id: String,
+            ifMatch: String,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
 }
 
 @Controller
-public interface OrganisationsContributorsController {
+@Validated
+public class OrganisationsContributorsController(
+    public val getDelegate: GetDelegate,
+    public val getByIdDelegate: GetByIdDelegate,
+    public val putByIdDelegate: PutByIdDelegate,
+    public val deleteByIdDelegate: DeleteByIdDelegate,
+) {
     /**
      * Page through all the Contributor resources for this parent Organisation matching the query
      * filters
@@ -287,7 +411,13 @@ public interface OrganisationsContributorsController {
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @QueryValue(value = "include_inactive") includeInactive: Boolean?,
         @QueryValue(value = "cursor") cursor: String?,
-    ): HttpResponse<ContributorQueryResult>
+    ): HttpResponse<ContributorQueryResult> = getDelegate.get(
+        parentId,
+        limit,
+        xFlowId,
+        includeInactive,
+        cursor,
+    )
 
     /**
      * Get a Contributor for this Organisation by ID
@@ -309,7 +439,7 @@ public interface OrganisationsContributorsController {
         @PathVariable(value = "id") id: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "If-None-Match") ifNoneMatch: String?,
-    ): HttpResponse<Contributor>
+    ): HttpResponse<Contributor> = getByIdDelegate.getById(parentId, id, xFlowId, ifNoneMatch)
 
     /**
      * Add an existing Contributor to this Organisation
@@ -340,7 +470,7 @@ public interface OrganisationsContributorsController {
         @Header(value = "If-Match") ifMatch: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = putByIdDelegate.putById(parentId, id, ifMatch, xFlowId, idempotencyKey)
 
     /**
      * Remove Contributor from this Organisation. Does not delete the underlying Contributor.
@@ -356,11 +486,54 @@ public interface OrganisationsContributorsController {
         @PathVariable(value = "parent-id") parentId: String,
         @PathVariable(value = "id") id: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = deleteByIdDelegate.deleteById(parentId, id, xFlowId)
+
+    public interface GetDelegate {
+        public fun `get`(
+            parentId: String,
+            limit: Int,
+            xFlowId: String?,
+            includeInactive: Boolean?,
+            cursor: String?,
+        ): HttpResponse<ContributorQueryResult>
+    }
+
+    public interface GetByIdDelegate {
+        public fun getById(
+            parentId: String,
+            id: String,
+            xFlowId: String?,
+            ifNoneMatch: String?,
+        ): HttpResponse<Contributor>
+    }
+
+    public interface PutByIdDelegate {
+        public fun putById(
+            parentId: String,
+            id: String,
+            ifMatch: String,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
+
+    public interface DeleteByIdDelegate {
+        public fun deleteById(
+            parentId: String,
+            id: String,
+            xFlowId: String?,
+        ): HttpResponse<Unit>
+    }
 }
 
 @Controller
-public interface RepositoriesController {
+@Validated
+public class RepositoriesController(
+    public val getDelegate: GetDelegate,
+    public val postDelegate: PostDelegate,
+    public val getByIdDelegate: GetByIdDelegate,
+    public val putByIdDelegate: PutByIdDelegate,
+) {
     /**
      * Page through all the Repository resources matching the query filters
      *
@@ -389,7 +562,14 @@ public interface RepositoriesController {
         @Valid @QueryValue(value = "name") name: List<String>?,
         @QueryValue(value = "include_inactive") includeInactive: Boolean?,
         @QueryValue(value = "cursor") cursor: String?,
-    ): HttpResponse<RepositoryQueryResult>
+    ): HttpResponse<RepositoryQueryResult> = getDelegate.get(
+        limit,
+        xFlowId,
+        slug,
+        name,
+        includeInactive,
+        cursor,
+    )
 
     /**
      * Create a new Repository
@@ -413,7 +593,7 @@ public interface RepositoriesController {
         @Body @Valid repository: Repository,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = postDelegate.post(repository, xFlowId, idempotencyKey)
 
     /**
      * Get a Repository by ID
@@ -437,7 +617,7 @@ public interface RepositoriesController {
         @QueryValue(value = "status", defaultValue = "all") status: StatusQueryParam,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "If-None-Match") ifNoneMatch: String?,
-    ): HttpResponse<Repository>
+    ): HttpResponse<Repository> = getByIdDelegate.getById(id, status, xFlowId, ifNoneMatch)
 
     /**
      * Update an existing Repository
@@ -469,11 +649,55 @@ public interface RepositoriesController {
         @Header(value = "If-Match") ifMatch: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = putByIdDelegate.putById(repository, id, ifMatch, xFlowId, idempotencyKey)
+
+    public interface GetDelegate {
+        public fun `get`(
+            limit: Int,
+            xFlowId: String?,
+            slug: List<String>?,
+            name: List<String>?,
+            includeInactive: Boolean?,
+            cursor: String?,
+        ): HttpResponse<RepositoryQueryResult>
+    }
+
+    public interface PostDelegate {
+        public fun post(
+            repository: Repository,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
+
+    public interface GetByIdDelegate {
+        public fun getById(
+            id: String,
+            status: StatusQueryParam,
+            xFlowId: String?,
+            ifNoneMatch: String?,
+        ): HttpResponse<Repository>
+    }
+
+    public interface PutByIdDelegate {
+        public fun putById(
+            repository: Repository,
+            id: String,
+            ifMatch: String,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
 }
 
 @Controller
-public interface RepositoriesPullRequestsController {
+@Validated
+public class RepositoriesPullRequestsController(
+    public val getDelegate: GetDelegate,
+    public val postDelegate: PostDelegate,
+    public val getByIdDelegate: GetByIdDelegate,
+    public val putByIdDelegate: PutByIdDelegate,
+) {
     /**
      * Page through all the PullRequest resources for this parent Repository matching the query
      * filters
@@ -499,7 +723,13 @@ public interface RepositoriesPullRequestsController {
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @QueryValue(value = "include_inactive") includeInactive: Boolean?,
         @QueryValue(value = "cursor") cursor: String?,
-    ): HttpResponse<PullRequestQueryResult>
+    ): HttpResponse<PullRequestQueryResult> = getDelegate.get(
+        parentId,
+        limit,
+        xFlowId,
+        includeInactive,
+        cursor,
+    )
 
     /**
      * Create a new PullRequest for this parent Repository
@@ -525,7 +755,7 @@ public interface RepositoriesPullRequestsController {
         @PathVariable(value = "parent-id") parentId: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = postDelegate.post(pullRequest, parentId, xFlowId, idempotencyKey)
 
     /**
      * Get a PullRequest for this Repository by ID
@@ -547,7 +777,7 @@ public interface RepositoriesPullRequestsController {
         @PathVariable(value = "id") id: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "If-None-Match") ifNoneMatch: String?,
-    ): HttpResponse<PullRequest>
+    ): HttpResponse<PullRequest> = getByIdDelegate.getById(parentId, id, xFlowId, ifNoneMatch)
 
     /**
      * Update the PullRequest owned by this Repository
@@ -581,5 +811,51 @@ public interface RepositoriesPullRequestsController {
         @Header(value = "If-Match") ifMatch: String,
         @Header(value = "X-Flow-Id") xFlowId: String?,
         @Header(value = "Idempotency-Key") idempotencyKey: UUID?,
-    ): HttpResponse<Unit>
+    ): HttpResponse<Unit> = putByIdDelegate.putById(
+        pullRequest,
+        parentId,
+        id,
+        ifMatch,
+        xFlowId,
+        idempotencyKey,
+    )
+
+    public interface GetDelegate {
+        public fun `get`(
+            parentId: String,
+            limit: Int,
+            xFlowId: String?,
+            includeInactive: Boolean?,
+            cursor: String?,
+        ): HttpResponse<PullRequestQueryResult>
+    }
+
+    public interface PostDelegate {
+        public fun post(
+            pullRequest: PullRequest,
+            parentId: String,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
+
+    public interface GetByIdDelegate {
+        public fun getById(
+            parentId: String,
+            id: String,
+            xFlowId: String?,
+            ifNoneMatch: String?,
+        ): HttpResponse<PullRequest>
+    }
+
+    public interface PutByIdDelegate {
+        public fun putById(
+            pullRequest: PullRequest,
+            parentId: String,
+            id: String,
+            ifMatch: String,
+            xFlowId: String?,
+            idempotencyKey: UUID?,
+        ): HttpResponse<Unit>
+    }
 }
