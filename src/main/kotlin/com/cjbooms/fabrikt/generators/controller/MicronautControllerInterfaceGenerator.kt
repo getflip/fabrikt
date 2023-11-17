@@ -20,11 +20,15 @@ import com.cjbooms.fabrikt.model.PathParam
 import com.cjbooms.fabrikt.model.QueryParam
 import com.cjbooms.fabrikt.model.RequestParameter
 import com.cjbooms.fabrikt.model.SourceApi
+import com.cjbooms.fabrikt.util.KaizenParserExtensions.basePath
 import com.cjbooms.fabrikt.util.KaizenParserExtensions.isSingleResource
 import com.cjbooms.fabrikt.util.KaizenParserExtensions.routeToPaths
+import com.cjbooms.fabrikt.util.toUpperCase
 import com.reprezen.kaizen.oasparser.model3.Operation
 import com.reprezen.kaizen.oasparser.model3.Path
 import com.squareup.kotlinpoet.AnnotationSpec
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -48,23 +52,73 @@ class MicronautControllerInterfaceGenerator(
     override fun generate(): MicronautControllers =
         MicronautControllers(
             api.openApi3.routeToPaths().map { (resourceName, paths) ->
-                buildController(resourceName, paths.values)
+                buildControllerWithDelegate(resourceName, paths.values)
             }.toSet(),
             addAuthenticationParameter,
         )
+
+    override fun buildFunction(path: Path, op: Operation, verb: String): FunSpec {
+        TODO("Not yet implemented")
+    }
+
+    fun buildControllerWithDelegate(resourceName: String, paths: Collection<Path>): ControllerType {
+        val controllerBuilder: TypeSpec.Builder = controllerBuilder(
+            className = ControllerGeneratorUtils.controllerName(resourceName),
+            basePath = api.openApi3.basePath()
+        )
+
+        val delegateName = "Delegate"
+        val delegateClassName = ClassName("", delegateName)
+        val delegateParameterName = "delegate"
+        val delegateBuilder = TypeSpec.interfaceBuilder(delegateName)
+
+        paths.flatMap { path ->
+            path.operations
+                .filter { it.key.toUpperCase() != "HEAD" }
+                .map { op ->
+                    controllerBuilder.addFunction(
+                        buildFunctionCallingDelegate(
+                            path,
+                            op.value,
+                            op.key,
+                            delegateParameterName
+                        )
+                    )
+                    delegateBuilder.addFunction(
+                        buildFunctionForDelegate(
+                            path,
+                            op.value,
+                            op.key
+                        )
+                    )
+                }
+        }
+        val delegateType = delegateBuilder.build()
+
+        controllerBuilder.addType(delegateType)
+        controllerBuilder.primaryConstructor(
+            FunSpec.constructorBuilder().addParameter(delegateParameterName, delegateClassName).build()
+        )
+
+        return ControllerType(
+            controllerBuilder.build(),
+            packages.base
+        )
+    }
 
     override fun controllerBuilder(
         className: String,
         basePath: String,
     ) =
-        TypeSpec.interfaceBuilder(className)
+        TypeSpec.classBuilder(className)
             .addAnnotation(
                 AnnotationSpec
                     .builder(MicronautImports.CONTROLLER)
                     .build(),
             )
 
-    override fun buildFunction(
+
+    fun buildFunctionForDelegate(
         path: Path,
         op: Operation,
         verb: String,
@@ -77,18 +131,51 @@ class MicronautControllerInterfaceGenerator(
         // Main method builder
         val funcSpec = FunSpec
             .builder(methodName)
-            .addModifiers(KModifier.ABSTRACT)
-            .addKdoc(op.toKdoc(parameters))
-            .addMicronautFunAnnotation(op, verb, path.pathString)
             .apply {
                 if (useSuspendModifier) {
                     addModifiers(KModifier.SUSPEND)
                 }
             }
+            .addModifiers(KModifier.ABSTRACT)
             .returns(returnType)
 
         // Function parameters
         parameters
+            .map { it.toParameterSpecBuilder().build() }
+            .forEach { funcSpec.addParameter(it) }
+
+        // Add authentication
+        if (addAuthenticationParameter) {
+            val securityOption = op.securitySupport(globalSecurity)
+
+            if (securityOption.allowsAuthenticated) {
+                val typeName =
+                    MicronautImports.AUTHENTICATION
+                        .copy(nullable = securityOption == SecuritySupport.AUTHENTICATION_OPTIONAL)
+                funcSpec.addParameter(
+                    ParameterSpec
+                        .builder("authentication", typeName)
+                        .build(),
+                )
+            }
+        }
+
+        return funcSpec.build()
+    }
+
+
+    fun buildFunctionCallingDelegate(
+        path: Path,
+        op: Operation,
+        verb: String,
+        delegateName: String
+    ): FunSpec {
+        val methodName = methodName(op, verb, path.pathString.isSingleResource())
+        val returnType = MicronautImports.RESPONSE.parameterizedBy(op.happyPathResponse(packages.base))
+        val parameters = op.toIncomingParameters(packages.base, path.parameters, emptyList())
+        val globalSecurity = this.api.openApi3.securityRequirements.securitySupport()
+
+        val mappedParameters = parameters
             .map {
                 when (it) {
                     is BodyParameter ->
@@ -108,8 +195,7 @@ class MicronautControllerInterfaceGenerator(
                             .addMicronautParamAnnotation(it)
                             .build()
                 }
-            }
-            .forEach { funcSpec.addParameter(it) }
+            }.toMutableList()
 
         // Add authentication
         if (addAuthenticationParameter) {
@@ -119,13 +205,40 @@ class MicronautControllerInterfaceGenerator(
                 val typeName =
                     MicronautImports.AUTHENTICATION
                         .copy(nullable = securityOption == SecuritySupport.AUTHENTICATION_OPTIONAL)
-                funcSpec.addParameter(
+                mappedParameters.add(
                     ParameterSpec
                         .builder("authentication", typeName)
-                        .build(),
+                        .build()
                 )
             }
         }
+
+        // Main method builder
+
+        val builder = CodeBlock.builder()
+        builder.add("return %L.%L(", delegateName, methodName)
+        mappedParameters
+            .forEachIndexed { index, param ->
+                builder.add("%L", param.name)
+                if (index < mappedParameters.size - 1) {
+                    builder.add(", ")
+                }
+            }
+        builder.add(")\n")
+
+        val funcSpec = FunSpec
+            .builder(methodName)
+            .addKdoc(op.toKdoc(parameters))
+            .addMicronautFunAnnotation(op, verb, path.pathString)
+            .apply {
+                if (useSuspendModifier) {
+                    addModifiers(KModifier.SUSPEND)
+                }
+            }.addCode(builder.build())
+            .returns(returnType)
+
+        // Function parameters
+        mappedParameters.forEach(funcSpec::addParameter)
 
         return funcSpec.build()
     }
