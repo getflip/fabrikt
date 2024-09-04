@@ -1,6 +1,5 @@
 package com.cjbooms.fabrikt.generators
 
-import com.cjbooms.fabrikt.generators.PropertyUtils.isNullable
 import com.cjbooms.fabrikt.generators.model.JacksonMetadata
 import com.cjbooms.fabrikt.model.KotlinTypeInfo
 import com.cjbooms.fabrikt.model.PropertyInfo
@@ -184,6 +183,8 @@ object PropertyUtils {
 
     fun PropertyInfo.isNullable(isMergePatch: Boolean = false) = when (this) {
         is PropertyInfo.Field -> !this.isMandatory(isMergePatch)
+        is PropertyInfo.ObjectInlinedField -> !this.isMandatory(isMergePatch)
+        is PropertyInfo.ObjectRefField -> !this.isMandatory(isMergePatch)
         else -> !isRequired
     }
 
@@ -191,6 +192,14 @@ object PropertyUtils {
       (isMergePatch && !schema.isNullable)
             || (!isMergePatch && (isRequired && !schema.isNullable))
             || (!isMergePatch && (!isRequired && schema.default != null))
+
+    private fun PropertyInfo.ObjectInlinedField.isMandatory(isMergePatch: Boolean = false) =
+        (isMergePatch && !schema.isNullable)
+                || (!isMergePatch && (isRequired && !schema.isNullable))
+
+    private fun PropertyInfo.ObjectRefField.isMandatory(isMergePatch: Boolean = false) =
+        (isMergePatch && !schema.isNullable)
+                || (!isMergePatch && (isRequired && !schema.isNullable))
 
 
     /**
