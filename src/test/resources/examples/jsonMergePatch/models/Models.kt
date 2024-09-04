@@ -43,6 +43,7 @@ public data class InnerOnlyMergePatchRef(
 public data class NestedMergePatchInline(
     @param:JsonProperty("inner")
     @get:JsonProperty("inner")
+    @get:NotNull
     @get:Valid
     public val `inner`: JsonNullable<NestedMergePatchInlineInner> = JsonNullable.undefined(),
 )
@@ -57,6 +58,7 @@ public data class NestedMergePatchInlineInner(
 public data class NestedMergePatchRef(
     @param:JsonProperty("inner")
     @get:JsonProperty("inner")
+    @get:NotNull
     @get:Valid
     public val `inner`: JsonNullable<InnerMergePatch> = JsonNullable.undefined(),
 )
@@ -84,6 +86,7 @@ public data class NoMergePatchRef(
 public data class TopLevelLevelMergePatchInline(
     @param:JsonProperty("inner")
     @get:JsonProperty("inner")
+    @get:NotNull
     @get:Valid
     public val `inner`: JsonNullable<TopLevelLevelMergePatchInlineInner> = JsonNullable.undefined(),
 )
@@ -97,6 +100,7 @@ public data class TopLevelLevelMergePatchInlineInner(
 public data class TopLevelLevelMergePatchRef(
     @param:JsonProperty("inner")
     @get:JsonProperty("inner")
+    @get:NotNull
     @get:Valid
     public val `inner`: JsonNullable<InnerNotMergePatch> = JsonNullable.undefined(),
 )

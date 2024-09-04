@@ -2,7 +2,9 @@ package examples.nullability.models
 
 import com.fasterxml.jackson.`annotation`.JsonProperty
 import org.openapitools.jackson.nullable.JsonNullable
+import javax.validation.Valid
 import javax.validation.constraints.NotNull
+import kotlin.Boolean
 import kotlin.String
 
 public data class MergePatchNullabilityCheck(
@@ -36,4 +38,19 @@ public data class NullabilityCheck(
     @param:JsonProperty("nullable-required")
     @get:JsonProperty("nullable-required")
     public val nullableRequired: String?,
+)
+
+public data class PropertyNullabilityCheck(
+    @param:JsonProperty("settings")
+    @get:JsonProperty("settings")
+    @get:NotNull
+    @get:Valid
+    public val settings: JsonNullable<PropertyNullabilityCheckSettings> = JsonNullable.undefined(),
+)
+
+public data class PropertyNullabilityCheckSettings(
+    @param:JsonProperty("enabled")
+    @get:JsonProperty("enabled")
+    @get:NotNull
+    public val enabled: Boolean,
 )
